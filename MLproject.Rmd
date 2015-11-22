@@ -1,0 +1,62 @@
+---
+title: "DS8_MachineLearning_Project"
+author: "Wu, Yun"
+date: "11/20/2015"
+output: html_document
+---
+
+
+
+```{r,echo=FALSE}
+setwd("/Users/wuyun/Documents/Gitrepo/DS8/")
+```
+```{r}
+library(caret)
+library(RWeka)
+library(rJava)
+library(RWekajars)
+set.seed(1523)
+```
+
+You can also embed plots, for example:
+
+```{r, echo=TRUE, cache=TRUE}
+training <- read.csv(file="data/pml-training.csv")
+testing <- read.csv(file="data/pml-testing.csv")
+# Remove columns which majority values are  either na or "#DIV/0!"
+colselected <- c()
+len <-nrow(training);
+for (i in 1:length(training)){
+	if(sum(is.na(training[,i]))<len/2){
+		if(sum(training[,i]=="")+ sum(training[,i]=="#DIV/0!")<len/2){
+			colselected <- c(colselected,i);
+		}
+	}
+}
+training <- training[,colselected]
+testing <- testing[,colselected]
+
+#remove the first column (sequence number)
+training <- training[,-1]
+testing <- testing[,-1]
+
+
+#devide the training set into sub training and testing dataset
+inTrain <- createDataPartition(training$classe,p=0.7,list=FALSE)
+subtraining <- training[inTrain,]
+subtesting <- training[-inTrain,]
+
+#set up the cross validation control
+cvControl<- trainControl(method="repeatedcv",number=10, repeats=10)
+
+#train the model using J48 as the classification model
+modelFit <- train(classe ~., method="J48",trControl=cvControl, data=subtraining)
+
+#measure the accuracy on test set (subset of original training set)
+confusionMatrix(subtesting$classe,predict(modelFit,subtesting[,-59]))
+
+#get the answer on original test set
+ans=predict(modelFit,testing)
+
+```
+
