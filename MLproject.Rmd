@@ -6,11 +6,25 @@ output: html_document
 ---
 
 
+##Background
 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+##Goal
+In this project, I will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. From the help of the training data, I will conclude the how they performed in the barebell lift by classifying the activities into five categories (A,B,C,D and E).
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Approach Summary
+In this project, I devide the training dataset further into subtraining and subtesting dataset. The subtraining dataset is used to train the model, and the subtesting dataset is used to evaluate the model performance.
+However, before that, I need to do the data clean, preprocess using normalization, principle component analysis. And then, to get the maximum accuracy and less biase, I will use cross validation.
+
+
+##Data Processing
 ```{r,echo=FALSE}
 setwd("/Users/wuyun/Documents/Gitrepo/DS8/")
 ```
-```{r}
+Import the library:
+```{r,echo=TRUE}
 library(caret)
 library(RWeka)
 library(rJava)
@@ -18,12 +32,15 @@ library(RWekajars)
 set.seed(1523)
 ```
 
-You can also embed plots, for example:
-
+Import the training and testing data:
 ```{r, echo=TRUE, cache=TRUE}
 training <- read.csv(file="data/pml-training.csv")
 testing <- read.csv(file="data/pml-testing.csv")
-# Remove columns which majority values are  either na or "#DIV/0!"
+```
+
+###1.Clean the data
+####(a).Remove columns which majority values are  either na or "#DIV/0!"
+```{r,echo=TRUE,cache=TRUE}
 colselected <- c()
 len <-nrow(training);
 for (i in 1:length(training)){
@@ -35,28 +52,65 @@ for (i in 1:length(training)){
 }
 training <- training[,colselected]
 testing <- testing[,colselected]
-
-#remove the first column (sequence number)
+```
+####(b).Remove the first column (sequence number)
+```{r,echo=TRUE,cache=TRUE}
 training <- training[,-1]
 testing <- testing[,-1]
+```
 
-
-#devide the training set into sub training and testing dataset
+###2.Slice the original training set into sub-training and sub-testing dataset for model training and evaluation
+```{r,echo=TRUE,cache=TRUE}
 inTrain <- createDataPartition(training$classe,p=0.7,list=FALSE)
 subtraining <- training[inTrain,]
 subtesting <- training[-inTrain,]
-
-#set up the cross validation control
-cvControl<- trainControl(method="repeatedcv",number=10, repeats=10)
-
-#train the model using J48 as the classification model
-modelFit <- train(classe ~., method="J48",trControl=cvControl, data=subtraining)
-
-#measure the accuracy on test set (subset of original training set)
-confusionMatrix(subtesting$classe,predict(modelFit,subtesting[,-59]))
-
-#get the answer on original test set
-ans=predict(modelFit,testing)
-
 ```
+
+###3.Normalize and center the variables
+```{r,cache=TRUE}
+preNorm <- preProcess(subtraining[,-59],method=c("center","scale"))
+subtraining[,-59] <- predict(preNorm,subtraining[,-59])
+subtesting[,-59] <- predict(preNorm,subtesting[,-59])
+testing <- predict(preNorm,testing)
+```
+
+###4.Principle component analysis
+```{r,cache=TRUE}
+prePrin <- preProcess(subtraining[,-59],method="pca",thresh=0.9)
+subtrainPC <- predict(prePrin, subtraining[,-59])
+subtestPC <- predict(prePrin, subtesting[,-59])
+testPC <- predict(prePrin, testing[,-59])
+print(prePrin)
+```
+
+###5.Set up the cross validation control
+```{r,cache=TRUE}
+cvControl<- trainControl(method="repeatedcv",number=10, repeats=5)
+```
+
+
+###6.Train the model with subtraining dataset, and evaluate the model using the subtesting dataset by caculating the confusion matrix
+Here, we use the principle components as variables to train and evaluate our model.
+
+Because the nature of this project, we need to classify the activities into five groups. And now we have both 3 factor variable and 20 principle component variables to train the model. Therefore, the best approach is to start from the J48 method.
+```{r,cache=TRUE}
+modelFit <- train(subtraining$classe~., method="J48", data=subtrainPC,trControl=cvControl)
+confusionMatrix(subtesting$classe,predict(modelFit,subtestPC))
+```
+As shown above, the overall accuracy is 0.932, which is pretty good.
+
+I have also tested several other methods, which does not generate as good accuracy as J48. Therefore, we stick to this classification method.
+
+###7. Final result
+```{r,cache=TRUE}
+predict(modelFit,testPC)
+```
+
+##Discussion
+Through the clean, normalize, principle component analysis and corss validation, and use the classification method J48, I got a relative accurate model. The overall accuracy is 0.932, based on the evaluation of subtesting dataset. 
+
+However, when doing the final prediction, the accuracy might be lower than what we predicted. That is because our model is using the principle compenent anlaysis which captures the 90% of the total variance. This reduces the number of variables used for the prediction from 158(original file) to 58(after data cleaning) and finally to 23(after principle analysis,we have three factor variables, and 20 principle components). Although we further tuned the model by cross validation, there might still be some out of sample error we could not address in our model.
+
+Therefore, our estimate error might be around 2/20. 
+
 

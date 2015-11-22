@@ -68,6 +68,18 @@ img {
 </div>
 
 
+<div id="background" class="section level2">
+<h2>Background</h2>
+<p>Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. ##Goal In this project, I will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. From the help of the training data, I will conclude the how they performed in the barebell lift by classifying the activities into five categories (A,B,C,D and E).</p>
+<p>More information is available from the website here: <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a> (see the section on the Weight Lifting Exercise Dataset).</p>
+</div>
+<div id="approach-summary" class="section level2">
+<h2>Approach Summary</h2>
+<p>In this project, I devide the training dataset further into subtraining and subtesting dataset. The subtraining dataset is used to train the model, and the subtesting dataset is used to evaluate the model performance. However, before that, I need to do the data clean, preprocess using normalization, principle component analysis. And then, to get the maximum accuracy and less biase, I will use cross validation.</p>
+</div>
+<div id="data-processing" class="section level2">
+<h2>Data Processing</h2>
+<p>Import the library:</p>
 <pre class="r"><code>library(caret)</code></pre>
 <pre><code>## Loading required package: lattice
 ## Loading required package: ggplot2</code></pre>
@@ -75,11 +87,14 @@ img {
 library(rJava)
 library(RWekajars)
 set.seed(1523)</code></pre>
-<p>You can also embed plots, for example:</p>
+<p>Import the training and testing data:</p>
 <pre class="r"><code>training &lt;- read.csv(file=&quot;data/pml-training.csv&quot;)
-testing &lt;- read.csv(file=&quot;data/pml-testing.csv&quot;)
-# Remove columns which majority values are  either na or &quot;#DIV/0!&quot;
-colselected &lt;- c()
+testing &lt;- read.csv(file=&quot;data/pml-testing.csv&quot;)</code></pre>
+<div id="clean-the-data" class="section level3">
+<h3>1.Clean the data</h3>
+<div id="a.remove-columns-which-majority-values-are-either-na-or-div0" class="section level4">
+<h4>(a).Remove columns which majority values are either na or “#DIV/0!”</h4>
+<pre class="r"><code>colselected &lt;- c()
 len &lt;-nrow(training);
 for (i in 1:length(training)){
     if(sum(is.na(training[,i]))&lt;len/2){
@@ -89,60 +104,101 @@ for (i in 1:length(training)){
     }
 }
 training &lt;- training[,colselected]
-testing &lt;- testing[,colselected]
-
-#remove the first column (sequence number)
-training &lt;- training[,-1]
-testing &lt;- testing[,-1]
-
-
-#devide the training set into sub training and testing dataset
-inTrain &lt;- createDataPartition(training$classe,p=0.7,list=FALSE)
+testing &lt;- testing[,colselected]</code></pre>
+</div>
+<div id="b.remove-the-first-column-sequence-number" class="section level4">
+<h4>(b).Remove the first column (sequence number)</h4>
+<pre class="r"><code>training &lt;- training[,-1]
+testing &lt;- testing[,-1]</code></pre>
+</div>
+</div>
+<div id="slice-the-original-training-set-into-sub-training-and-sub-testing-dataset-for-model-training-and-evaluation" class="section level3">
+<h3>2.Slice the original training set into sub-training and sub-testing dataset for model training and evaluation</h3>
+<pre class="r"><code>inTrain &lt;- createDataPartition(training$classe,p=0.7,list=FALSE)
 subtraining &lt;- training[inTrain,]
-subtesting &lt;- training[-inTrain,]
-
-#set up the cross validation control
-cvControl&lt;- trainControl(method=&quot;repeatedcv&quot;,number=10, repeats=10)
-
-#train the model using J48 as the classification model
-modelFit &lt;- train(classe ~., method=&quot;J48&quot;,trControl=cvControl, data=subtraining)
-
-#measure the accuracy on test set (subset of original training set)
-confusionMatrix(subtesting$classe,predict(modelFit,subtesting[,-59]))</code></pre>
+subtesting &lt;- training[-inTrain,]</code></pre>
+</div>
+<div id="normalize-and-center-the-variables" class="section level3">
+<h3>3.Normalize and center the variables</h3>
+<pre class="r"><code>preNorm &lt;- preProcess(subtraining[,-59],method=c(&quot;center&quot;,&quot;scale&quot;))
+subtraining[,-59] &lt;- predict(preNorm,subtraining[,-59])
+subtesting[,-59] &lt;- predict(preNorm,subtesting[,-59])
+testing &lt;- predict(preNorm,testing)</code></pre>
+</div>
+<div id="principle-component-analysis" class="section level3">
+<h3>4.Principle component analysis</h3>
+<pre class="r"><code>prePrin &lt;- preProcess(subtraining[,-59],method=&quot;pca&quot;,thresh=0.9)
+subtrainPC &lt;- predict(prePrin, subtraining[,-59])
+subtestPC &lt;- predict(prePrin, subtesting[,-59])
+testPC &lt;- predict(prePrin, testing[,-59])
+print(prePrin)</code></pre>
+<pre><code>## Created from 13737 samples and 58 variables
+## 
+## Pre-processing:
+##   - centered (55)
+##   - ignored (3)
+##   - principal component signal extraction (55)
+##   - scaled (55)
+## 
+## PCA needed 20 components to capture 90 percent of the variance</code></pre>
+</div>
+<div id="set-up-the-cross-validation-control" class="section level3">
+<h3>5.Set up the cross validation control</h3>
+<pre class="r"><code>cvControl&lt;- trainControl(method=&quot;repeatedcv&quot;,number=10, repeats=5)</code></pre>
+</div>
+<div id="train-the-model-with-subtraining-dataset-and-evaluate-the-model-using-the-subtesting-dataset-by-caculating-the-confusion-matrix" class="section level3">
+<h3>6.Train the model with subtraining dataset, and evaluate the model using the subtesting dataset by caculating the confusion matrix</h3>
+<p>Here, we use the principle components as variables to train and evaluate our model.</p>
+<p>Because the nature of this project, we need to classify the activities into five groups. And now we have both 3 factor variable and 20 principle component variables to train the model. Therefore, the best approach is to start from the J48 method.</p>
+<pre class="r"><code>modelFit &lt;- train(subtraining$classe~., method=&quot;J48&quot;, data=subtrainPC,trControl=cvControl)
+confusionMatrix(subtesting$classe,predict(modelFit,subtestPC))</code></pre>
 <pre><code>## Confusion Matrix and Statistics
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 1669    5    0    0    0
-##          B    4 1134    1    0    0
-##          C    0    0 1026    0    0
-##          D    0    0    4  960    0
-##          E    0    0    0    1 1081
+##          A 1580   65   29    0    0
+##          B   61 1026   49    3    0
+##          C   27   44  930   22    3
+##          D    0    3   34  903   24
+##          E    0    0    5   32 1045
 ## 
 ## Overall Statistics
 ##                                           
-##                Accuracy : 0.9975          
-##                  95% CI : (0.9958, 0.9986)
-##     No Information Rate : 0.2843          
+##                Accuracy : 0.9319          
+##                  95% CI : (0.9251, 0.9382)
+##     No Information Rate : 0.2834          
 ##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
 ##                                           
-##                   Kappa : 0.9968          
+##                   Kappa : 0.9138          
 ##  Mcnemar's Test P-Value : NA              
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9976   0.9956   0.9952   0.9990   1.0000
-## Specificity            0.9988   0.9989   1.0000   0.9992   0.9998
-## Pos Pred Value         0.9970   0.9956   1.0000   0.9959   0.9991
-## Neg Pred Value         0.9991   0.9989   0.9990   0.9998   1.0000
-## Prevalence             0.2843   0.1935   0.1752   0.1633   0.1837
-## Detection Rate         0.2836   0.1927   0.1743   0.1631   0.1837
+## Sensitivity            0.9472   0.9016   0.8883   0.9406   0.9748
+## Specificity            0.9777   0.9762   0.9802   0.9876   0.9923
+## Pos Pred Value         0.9438   0.9008   0.9064   0.9367   0.9658
+## Neg Pred Value         0.9791   0.9764   0.9759   0.9884   0.9944
+## Prevalence             0.2834   0.1934   0.1779   0.1631   0.1822
+## Detection Rate         0.2685   0.1743   0.1580   0.1534   0.1776
 ## Detection Prevalence   0.2845   0.1935   0.1743   0.1638   0.1839
-## Balanced Accuracy      0.9982   0.9973   0.9976   0.9991   0.9999</code></pre>
-<pre class="r"><code>#get the answer on original test set
-ans=predict(modelFit,testing)</code></pre>
-<p>Note that the <code>echo = FALSE</code> parameter was added to the code chunk to prevent printing of the R code that generated the plot.</p>
+## Balanced Accuracy      0.9625   0.9389   0.9342   0.9641   0.9836</code></pre>
+<p>As shown above, the overall accuracy is 0.932, which is pretty good.</p>
+<p>I have also tested several other methods, which does not generate as good accuracy as J48. Therefore, we stick to this classification method.</p>
+</div>
+<div id="final-result" class="section level3">
+<h3>7. Final result</h3>
+<pre class="r"><code>predict(modelFit,testPC)</code></pre>
+<pre><code>##  [1] B A A A A E D B A A A C B A D E A B B B
+## Levels: A B C D E</code></pre>
+</div>
+</div>
+<div id="discussion" class="section level2">
+<h2>Discussion</h2>
+<p>Through the clean, normalize, principle component analysis and corss validation, and use the classification method J48, I got a relative accurate model. The overall accuracy is 0.932, based on the evaluation of subtesting dataset.</p>
+<p>However, when doing the final prediction, the accuracy might be lower than what we predicted. That is because our model is using the principle compenent anlaysis which captures the 90% of the total variance. This reduces the number of variables used for the prediction from 158(original file) to 58(after data cleaning) and finally to 23(after principle analysis,we have three factor variables, and 20 principle components). Although we further tuned the model by cross validation, there might still be some out of sample error we could not address in our model.</p>
+<p>Therefore, our estimate error might be around 2/20.</p>
+</div>
 
 
 </div>
